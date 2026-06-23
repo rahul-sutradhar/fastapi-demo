@@ -1,0 +1,13 @@
+{
+    "terminal.integrated.profiles.windows": {
+        "ProjectCMD": {
+            "path": "cmd.exe",
+            "icon": "terminal-cmd",
+            "args": ["/K", "${workspaceFolder}/init.bat"]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "ProjectCMD",
+    
+    // CRITICAL: Forces new tabs to inherit active window memory states
+    "terminal.integrated.inheritEnv": true
+}

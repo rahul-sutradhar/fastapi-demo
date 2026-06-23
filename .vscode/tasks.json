@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Cleanup Terminal Lock",
+            "type": "shell",
+            "command": "if exist .terminal.lock del /f /q .terminal.lock",
+            "runOptions": {
+                "runOn": "folderOpen" 
+            },
+            "presentation": {
+                "reveal": "never",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}
