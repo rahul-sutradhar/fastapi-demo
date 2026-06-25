@@ -762,6 +762,7 @@ body {
   align-items: center;
   justify-content: center;
   background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .create-preview-placeholder {
