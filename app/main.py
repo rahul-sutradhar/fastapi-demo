@@ -1,5 +1,7 @@
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from . import models
 from .database import engine
@@ -55,3 +57,7 @@ app.include_router(cloudinary_upload.router)
 @app.get("/")
 def root():    #The function name doesn't matter
     return {"message": "Welcome to my API. Successfully deployed CI/CD pipeline."}
+
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
