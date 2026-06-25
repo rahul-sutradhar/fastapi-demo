@@ -11,14 +11,18 @@ def get_upload_signature(folder: str = "picto"):
         raise HTTPException(status_code=403, detail="Cloudinary not configured")
 
     timestamp = int(time.time())
-    params = f"folder={folder}&timestamp={timestamp}&upload_preset={settings.cloudinary_upload_preset}"
+    params = f"folder={folder}&timestamp={timestamp}"
+    if settings.cloudinary_upload_preset:
+        params += f"&upload_preset={settings.cloudinary_upload_preset}"
     signature = hashlib.sha1((params + settings.cloudinary_api_secret).encode()).hexdigest()
 
-    return {
+    result = {
         "cloud_name": settings.cloudinary_cloud_name,
         "api_key": settings.cloudinary_api_key,
-        "upload_preset": settings.cloudinary_upload_preset,
         "timestamp": timestamp,
         "signature": signature,
         "folder": folder,
     }
+    if settings.cloudinary_upload_preset:
+        result["upload_preset"] = settings.cloudinary_upload_preset
+    return result

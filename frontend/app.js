@@ -9,7 +9,8 @@ const PAGE_SIZE = 10;
 let searchQuery = '';
 let deletingPostId = null;
 let editingPostId = null;
-let pendingMediaUrls = [];
+let pendingMediaFiles = [];
+let editPendingMediaFiles = [];
 const MAX_MEDIA = 5;
 const votedPosts = new Set();
 
@@ -68,18 +69,18 @@ function getGradient(email) {
   return GRADIENT_COLORS[Math.abs(hash) % GRADIENT_COLORS.length];
 }
 function timeAgo(dateStr) {
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (diff < 60) return 'just now';
+  const now = Date.now();
+  const diff = Math.floor((now - new Date(dateStr).getTime()) / 1000);
+  if (diff < 60) return `${diff}s`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  if (diff < 2592000) return `${Math.floor(diff / 86400)}d`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 function escHtml(str) {
   if (!str) return '';
   const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
 }
-
 function getMediaType(url) {
   if (!url) return null;
   const isVideo = /\/video\/upload\//.test(url) || /\.(mp4|webm|mov|avi|mkv)(\?|$)/i.test(url);
@@ -88,7 +89,6 @@ function getMediaType(url) {
   if (isImage) return 'image';
   return null;
 }
-
 function getContentParts(content) {
   if (!content) return { mediaUrls: [], caption: content || '' };
   const lines = content.split('\n');
@@ -161,36 +161,39 @@ function initDashboard() {
   document.getElementById('profile-btn').addEventListener('click', () => { document.getElementById('dropdown-menu').classList.add('hidden'); openProfile(); });
   document.getElementById('avatar-btn').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('dropdown-menu').classList.toggle('hidden'); });
   document.addEventListener('click', () => { document.getElementById('dropdown-menu').classList.add('hidden'); });
-  document.getElementById('search-toggle').addEventListener('click', () => {
-    const bar = document.getElementById('search-bar');
-    bar.classList.toggle('hidden');
-    if (!bar.classList.contains('hidden')) { document.getElementById('search-input').focus(); }
-    else { searchQuery = ''; currentPage = 1; loadFeed(); }
+  document.getElementById('new-post-btn').addEventListener('click', () => openCreateModal());
+  document.getElementById('bottom-home').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  document.getElementById('bottom-search').addEventListener('click', () => {
+    document.getElementById('search-input').focus();
   });
-  document.getElementById('new-post-btn').addEventListener('click', () => openModal());
-  document.getElementById('media-upload-btn').addEventListener('click', () => {
+  document.getElementById('bottom-create').addEventListener('click', () => openCreateModal());
+  document.getElementById('bottom-activity').addEventListener('click', () => openProfile());
+  document.getElementById('bottom-profile').addEventListener('click', () => openProfile());
+  document.getElementById('create-modal-back').addEventListener('click', closeCreateModal);
+  document.getElementById('create-modal-share').addEventListener('click', handleCreateSubmit);
+  document.getElementById('create-select-btn').addEventListener('click', () => {
     document.getElementById('media-input').value = '';
     document.getElementById('media-input').click();
   });
-  document.getElementById('media-input').addEventListener('change', handleMediaSelect);
-  document.getElementById('media-remove-btn').addEventListener('click', () => {
-    pendingMediaUrls = [];
+  document.getElementById('media-input').addEventListener('change', handleCreateMediaSelect);
+  document.getElementById('create-change-btn').addEventListener('click', () => {
     document.getElementById('media-input').value = '';
-    document.getElementById('media-preview-grid').classList.add('hidden');
-    document.getElementById('media-preview-grid').innerHTML = '';
-    document.getElementById('media-upload-btn').style.display = '';
-    document.getElementById('media-count').textContent = '';
+    document.getElementById('media-input').click();
   });
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('modal-back').addEventListener('click', closeModal);
-  document.getElementById('modal-overlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
-  document.getElementById('post-form').addEventListener('submit', handlePostSubmit);
-  document.getElementById('delete-close').addEventListener('click', closeDeleteModal);
+  document.getElementById('edit-modal-back').addEventListener('click', closeEditModal);
+  document.getElementById('edit-modal-share').addEventListener('click', handleEditSubmit);
+  document.getElementById('edit-change-btn').addEventListener('click', () => {
+    document.getElementById('edit-media-input').value = '';
+    document.getElementById('edit-media-input').click();
+  });
+  document.getElementById('edit-media-input').addEventListener('change', handleEditMediaSelect);
   document.getElementById('delete-cancel').addEventListener('click', closeDeleteModal);
-  document.getElementById('delete-overlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeDeleteModal(); });
   document.getElementById('delete-confirm').addEventListener('click', confirmDelete);
-  document.getElementById('profile-close').addEventListener('click', closeProfile);
-  document.getElementById('profile-overlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeProfile(); });
+  document.getElementById('profile-close-btn').addEventListener('click', closeProfileModal);
+  document.getElementById('create-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCreateModal(); });
+  document.getElementById('edit-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeEditModal(); });
+  document.getElementById('delete-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeDeleteModal(); });
+  document.getElementById('profile-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeProfileModal(); });
   let searchTimer;
   document.getElementById('search-input').addEventListener('input', (e) => {
     clearTimeout(searchTimer);
@@ -206,8 +209,14 @@ async function fetchCurrentUser() {
     const payload = JSON.parse(atob(token.split('.')[1]));
     if (payload.user_id) {
       currentUser = await api(`/users/${payload.user_id}`);
-      document.getElementById('header-avatar').textContent = getInitials(currentUser.email);
+      const initial = getInitials(currentUser.email);
+      document.getElementById('header-avatar').textContent = initial;
       document.getElementById('dropdown-user').textContent = currentUser.email;
+      document.getElementById('create-user-avatar').textContent = initial;
+      document.getElementById('create-username').textContent = currentUser.email.split('@')[0];
+      document.getElementById('edit-user-avatar').textContent = initial;
+      document.getElementById('edit-username').textContent = currentUser.email.split('@')[0];
+      document.getElementById('bottom-avatar').textContent = initial;
     }
   } catch {}
 }
@@ -239,62 +248,114 @@ function renderFeed(posts) {
     const initial = getInitials(email);
     const gradient = getGradient(email);
     const gradientStr = `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`;
-    const titleInitial = (p.title || 'P').charAt(0).toUpperCase();
     const { mediaUrls, caption } = getContentParts(p.content || '');
     const captionText = caption || p.content;
+    const username = email.split('@')[0];
 
-    let mediaSection;
+    let mediaHtml;
     if (mediaUrls.length === 1) {
       const url = escHtml(mediaUrls[0]);
       const t = getMediaType(mediaUrls[0]);
-      if (t === 'video') mediaSection = `<div class="post-image has-image" style="aspect-ratio:auto"><video src="${url}" controls style="width:100%;display:block" preload="metadata"></video></div>`;
-      else mediaSection = `<div class="post-image has-image"><img src="${url}" alt="${escHtml(p.title)}" loading="lazy"></div>`;
+      if (t === 'video') {
+        mediaHtml = `<video class="post-display-video" src="${url}" controls preload="metadata"></video>`;
+      } else {
+        mediaHtml = `<img class="post-display-img" src="${url}" alt="${escHtml(p.title)}" loading="lazy">`;
+      }
     } else if (mediaUrls.length > 1) {
       let items = '';
-      mediaUrls.forEach((u, i) => {
+      mediaUrls.forEach((u) => {
         const eu = escHtml(u);
         const t = getMediaType(u);
-        if (t === 'video') items += `<div class="media-grid-item"><video src="${eu}" controls preload="metadata"></video></div>`;
-        else items += `<div class="media-grid-item"><img src="${eu}" alt="" loading="lazy"></div>`;
+        if (t === 'video') items += `<div style="overflow:hidden;aspect-ratio:1"><video src="${eu}" style="width:100%;height:100%;object-fit:cover" controls preload="metadata"></video></div>`;
+        else items += `<div style="overflow:hidden;aspect-ratio:1"><img src="${eu}" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>`;
       });
-      mediaSection = `<div class="post-image has-image media-grid">${items}</div>`;
+      const cols = mediaUrls.length === 2 ? 2 : 2;
+      mediaHtml = `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:2px;background:var(--bg)">${items}</div>`;
     } else {
-      mediaSection = `<div class="post-image" style="background:${gradientStr}"><span class="post-image-initial">${titleInitial}</span></div>`;
+      mediaHtml = `<div class="post-display-img" style="background:${gradientStr};display:flex;align-items:center;justify-content:center;aspect-ratio:1;font-size:72px;font-weight:700;color:rgba(255,255,255,0.3)">${p.title.charAt(0).toUpperCase()}</div>`;
     }
 
     const card = document.createElement('div');
     card.className = 'post-card';
+    card.dataset.postId = p.id;
+
+    const actionBarLiked = votedPosts.has(p.id) ? ' liked' : '';
+    const heartSvgFill = votedPosts.has(p.id) ? 'fill="currentColor"' : 'fill="none"';
+
     card.innerHTML = `
       <div class="post-header">
-        <div class="avatar avatar-md" style="background:${gradientStr}">${initial}</div>
-        <div class="post-author">
-          <div class="post-username">${escHtml(email.split('@')[0])}</div>
-          <div class="post-time">${timeAgo(p.created_at)}</div>
+        <div class="post-header-avatar" style="background:${gradientStr}">${initial}</div>
+        <div class="post-header-info">
+          <div class="post-username">${escHtml(username)}</div>
         </div>
-        ${isOwner ? `<div class="post-more-btn" data-post-id="${p.id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>` : ''}
+        ${isOwner ? `<button class="post-options-btn" data-post-id="${p.id}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>` : ''}
       </div>
-      ${mediaSection}
-      <div class="post-body">
-        <div class="post-actions-bar">
-          <button class="like-btn ${votedPosts.has(p.id) ? 'liked' : ''}" data-post-id="${p.id}">
-            <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="${votedPosts.has(p.id) ? 'currentColor' : 'none'}" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          </button>
-          <span class="post-likes vote-count">${voteCount} ${voteCount === 1 ? 'like' : 'likes'}</span>
+      <div class="post-image-wrapper" data-post-id="${p.id}">
+        ${mediaHtml}
+        <div class="heart-overlay" id="heart-${p.id}">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         </div>
-        <div class="post-caption"><span class="caption-username">${escHtml(email.split('@')[0])}</span> ${escHtml(p.title)}${captionText ? ' — ' + escHtml(captionText) : ''}</div>
-        ${isOwner ? `<div class="post-owner-actions"><button class="post-owner-btn edit-btn" data-post-id="${p.id}">Edit</button><button class="post-owner-btn danger delete-btn" data-post-id="${p.id}">Delete</button></div>` : ''}
-      </div>`;
+      </div>
+      <div class="post-actions">
+        <div class="post-actions-left">
+          <button class="action-btn like-btn${actionBarLiked}" data-post-id="${p.id}">
+            <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" ${heartSvgFill} stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </button>
+          <button class="action-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button class="action-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </div>
+        <button class="action-btn">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        </button>
+      </div>
+      <div class="post-likes-row">${voteCount} ${voteCount === 1 ? 'like' : 'likes'}</div>
+      <div class="post-caption-row"><span class="caption-username">${escHtml(username)}</span> ${escHtml(p.title)}${captionText ? ' — ' + escHtml(captionText) : ''}</div>
+      <div class="post-time">${timeAgo(p.created_at).toUpperCase()} AGO</div>
+      ${isOwner ? `<div class="post-owner-badges"><button class="post-owner-badge edit-btn" data-post-id="${p.id}">Edit</button><button class="post-owner-badge danger delete-btn" data-post-id="${p.id}">Delete</button></div>` : ''}`;
 
-    card.querySelector('.like-btn').addEventListener('click', () => handleVote(p.id, card));
-    const moreBtn = card.querySelector('.post-more-btn');
-    if (moreBtn) moreBtn.addEventListener('click', (e) => { e.stopPropagation(); openEditModal(p); });
+    const imgWrapper = card.querySelector('.post-image-wrapper');
+    let lastTap = 0;
+    imgWrapper.addEventListener('click', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 350) {
+        handleVote(p.id, card);
+        showHeartOverlay(p.id);
+      }
+      lastTap = now;
+    });
+
+    card.querySelector('.like-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleVote(p.id, card);
+    });
+    const optionsBtn = card.querySelector('.post-options-btn');
+    if (optionsBtn) {
+      optionsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditModal(p);
+      });
+    }
     const editBtn = card.querySelector('.edit-btn');
     if (editBtn) editBtn.addEventListener('click', () => openEditModal(p));
     const delBtn = card.querySelector('.delete-btn');
     if (delBtn) delBtn.addEventListener('click', () => openDeleteModal(p.id));
     feed.appendChild(card);
   });
-  document.getElementById('feed-end').textContent = posts.length < PAGE_SIZE ? 'You\'ve reached the end' : '';
+  document.getElementById('feed-end').textContent = posts.length < PAGE_SIZE ? "You've reached the end" : '';
+}
+
+function showHeartOverlay(postId) {
+  const overlay = document.getElementById(`heart-${postId}`);
+  if (overlay) {
+    overlay.classList.remove('visible');
+    void overlay.offsetWidth;
+    overlay.classList.add('visible');
+    setTimeout(() => overlay.classList.remove('visible'), 600);
+  }
 }
 
 async function handleVote(postId, card) {
@@ -318,185 +379,241 @@ async function handleVote(postId, card) {
 
 function updateVoteState(postId, card, liked) {
   const btn = card.querySelector('.like-btn');
-  const countEl = card.querySelector('.vote-count');
+  const countEl = card.querySelector('.post-likes-row');
   const current = parseInt(countEl.textContent) || 0;
+  const svg = btn.querySelector('svg');
   if (liked) {
     votedPosts.add(postId);
     countEl.textContent = `${current + 1} ${current + 1 === 1 ? 'like' : 'likes'}`;
     btn.classList.add('liked');
-    btn.querySelector('svg').setAttribute('fill', 'currentColor');
+    svg.setAttribute('fill', 'currentColor');
+    showHeartOverlay(postId);
   } else {
     votedPosts.delete(postId);
     countEl.textContent = `${Math.max(0, current - 1)} ${current - 1 === 1 ? 'like' : 'likes'}`;
     btn.classList.remove('liked');
-    btn.querySelector('svg').setAttribute('fill', 'none');
+    svg.setAttribute('fill', 'none');
   }
 }
 
-function openModal(post = null) {
-  editingPostId = post ? post.id : null;
-  document.getElementById('modal-title').textContent = post ? 'Edit Post' : 'New Post';
-  document.getElementById('post-title').value = post ? post.title : '';
-  document.getElementById('post-content').value = '';
-  document.getElementById('media-preview-grid').classList.add('hidden');
-  document.getElementById('media-preview-grid').innerHTML = '';
-  document.getElementById('media-upload-btn').style.display = '';
-  document.getElementById('media-count').textContent = '';
-  pendingMediaUrls = [];
-
-  if (post && post.content) {
-    const { mediaUrls, caption } = getContentParts(post.content);
-    document.getElementById('post-content').value = caption || post.content;
-    if (mediaUrls.length > 0) {
-      pendingMediaUrls = [...mediaUrls];
-      buildPreviewGrid(mediaUrls);
-      document.getElementById('media-upload-btn').style.display = 'none';
-      document.getElementById('media-count').textContent = `${mediaUrls.length} file(s)`;
-    }
-  }
-
-  document.getElementById('post-published').checked = post ? post.published : true;
-  document.getElementById('modal-submit').textContent = post ? 'Save' : 'Share';
-  hideError('post-error');
-  document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-function openEditModal(post) { openModal(post); }
-
-function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
+function openCreateModal() {
   editingPostId = null;
-  pendingMediaUrls = [];
+  pendingMediaFiles = [];
+  document.getElementById('create-caption').value = '';
+  document.getElementById('create-error').classList.add('hidden');
+  document.getElementById('create-preview-placeholder').classList.remove('hidden');
+  document.getElementById('create-preview-content').classList.remove('visible');
+  document.getElementById('create-preview-grid').innerHTML = '';
+  document.getElementById('create-modal-share').disabled = false;
+  document.getElementById('create-modal-share').textContent = 'Share';
   document.getElementById('media-input').value = '';
-  document.getElementById('media-preview-grid').classList.add('hidden');
-  document.getElementById('media-preview-grid').innerHTML = '';
-  document.getElementById('media-upload-btn').style.display = '';
-  document.getElementById('media-count').textContent = '';
+  document.getElementById('create-modal').classList.remove('hidden');
 }
 
-async function handleMediaSelect(e) {
+function closeCreateModal() {
+  document.getElementById('create-modal').classList.add('hidden');
+  pendingMediaFiles.forEach(item => { if (item.file) URL.revokeObjectURL(item.preview); });
+  pendingMediaFiles = [];
+}
+
+function openEditModal(post) {
+  editingPostId = post.id;
+  editPendingMediaFiles = [];
+  document.getElementById('edit-caption').value = '';
+  document.getElementById('edit-error').classList.add('hidden');
+  document.getElementById('edit-preview-grid').innerHTML = '';
+  document.getElementById('edit-modal-share').disabled = false;
+  document.getElementById('edit-modal-share').textContent = 'Save';
+
+  if (post.content) {
+    const { mediaUrls, caption } = getContentParts(post.content);
+    document.getElementById('edit-caption').value = caption || post.content;
+    mediaUrls.forEach(url => {
+      editPendingMediaFiles.push({ file: null, preview: url });
+    });
+    buildEditPreviewGrid(editPendingMediaFiles);
+  }
+
+  document.getElementById('edit-media-input').value = '';
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  editPendingMediaFiles.forEach(item => { if (item.file) URL.revokeObjectURL(item.preview); });
+  editPendingMediaFiles = [];
+  editingPostId = null;
+}
+
+function handleCreateMediaSelect(e) {
   const files = Array.from(e.target.files);
   if (files.length === 0) return;
 
-  const remaining = MAX_MEDIA - pendingMediaUrls.length;
+  const remaining = MAX_MEDIA - pendingMediaFiles.length;
   if (files.length > remaining) {
-    showError('post-error', `You can add up to ${MAX_MEDIA} files total. ${remaining} remaining.`);
+    showError('create-error', `You can add up to ${MAX_MEDIA} files. ${remaining} remaining.`);
     return;
   }
 
-  const statusEl = document.getElementById('upload-status');
-  const countEl = document.getElementById('media-count');
-  document.getElementById('media-upload-btn').style.display = 'none';
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const isVideo = file.type.startsWith('video/');
-    statusEl.classList.remove('hidden');
-    statusEl.textContent = `Uploading ${i + 1} of ${files.length}...`;
-
-    try {
-      if (!cloudinaryConfig) cloudinaryConfig = await api('/upload-signature');
-
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('api_key', cloudinaryConfig.api_key);
-      fd.append('timestamp', cloudinaryConfig.timestamp);
-      fd.append('signature', cloudinaryConfig.signature);
-      fd.append('upload_preset', cloudinaryConfig.upload_preset);
-      fd.append('folder', cloudinaryConfig.folder);
-
-      const rt = isVideo ? 'video' : 'image';
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloud_name}/${rt}/upload`, { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
-
-      pendingMediaUrls.push(data.secure_url);
-    } catch (err) {
-      statusEl.textContent = `Upload failed: ${err.message}`;
-      document.getElementById('media-upload-btn').style.display = '';
-      return;
-    }
+  for (const file of files) {
+    const preview = URL.createObjectURL(file);
+    pendingMediaFiles.push({ file, preview });
   }
 
-  buildPreviewGrid(pendingMediaUrls);
-  statusEl.textContent = '';
-  statusEl.classList.add('hidden');
-  countEl.textContent = `${pendingMediaUrls.length} file(s)`;
-  if (pendingMediaUrls.length < MAX_MEDIA) {
-    document.getElementById('media-upload-btn').style.display = '';
-  }
+  buildCreatePreviewGrid(pendingMediaFiles);
+  document.getElementById('create-preview-placeholder').classList.add('hidden');
+  document.getElementById('create-preview-content').classList.add('visible');
 }
 
-function buildPreviewGrid(urls) {
-  const grid = document.getElementById('media-preview-grid');
+function buildCreatePreviewGrid(items) {
+  const grid = document.getElementById('create-preview-grid');
   grid.innerHTML = '';
-  urls.forEach((url, idx) => {
-    const item = document.createElement('div');
-    item.className = 'preview-item';
-    const t = getMediaType(url);
-    if (t === 'video') {
-      const video = document.createElement('video');
-      video.src = url; video.controls = false; video.muted = true;
-      item.appendChild(video);
-    } else {
-      const img = document.createElement('img');
-      img.src = url;
-      item.appendChild(img);
-    }
-    const del = document.createElement('button');
-    del.className = 'preview-item-remove';
-    del.innerHTML = '&times;';
-    del.addEventListener('click', (e) => { e.stopPropagation(); removeMediaItem(idx); });
-    item.appendChild(del);
-    grid.appendChild(item);
+  grid.className = 'create-preview-grid';
+  if (items.length > 1) grid.classList.add('multi');
+  items.forEach((item) => {
+    const isVideo = item.file ? item.file.type.startsWith('video/') : getMediaType(item.preview) === 'video';
+    const el = document.createElement(isVideo ? 'video' : 'img');
+    el.src = item.preview;
+    if (isVideo) { el.muted = true; el.controls = false; }
+    el.loading = 'lazy';
+    grid.appendChild(el);
   });
-  grid.classList.remove('hidden');
 }
 
-function removeMediaItem(idx) {
-  pendingMediaUrls.splice(idx, 1);
-  if (pendingMediaUrls.length === 0) {
-    document.getElementById('media-preview-grid').classList.add('hidden');
-    document.getElementById('media-preview-grid').innerHTML = '';
-    document.getElementById('media-upload-btn').style.display = '';
-    document.getElementById('media-count').textContent = '';
-  } else {
-    buildPreviewGrid(pendingMediaUrls);
-    document.getElementById('media-count').textContent = `${pendingMediaUrls.length} file(s)`;
+function handleEditMediaSelect(e) {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
+
+  const remaining = MAX_MEDIA - editPendingMediaFiles.length;
+  if (files.length > remaining) {
+    showError('edit-error', `You can add up to ${MAX_MEDIA} files. ${remaining} remaining.`);
+    return;
   }
+
+  for (const file of files) {
+    const preview = URL.createObjectURL(file);
+    editPendingMediaFiles.push({ file, preview });
+  }
+
+  buildEditPreviewGrid(editPendingMediaFiles);
 }
 
-async function handlePostSubmit(e) {
-  e.preventDefault();
-  hideError('post-error');
-  const title = document.getElementById('post-title').value.trim();
-  const caption = document.getElementById('post-content').value.trim();
-  const published = document.getElementById('post-published').checked;
-  if (!title || !caption) { showError('post-error', 'Please fill in all fields'); return; }
+function buildEditPreviewGrid(items) {
+  const grid = document.getElementById('edit-preview-grid');
+  grid.innerHTML = '';
+  grid.className = 'create-preview-grid';
+  if (items.length > 1) grid.classList.add('multi');
+  items.forEach((item) => {
+    const isVideo = item.file ? item.file.type.startsWith('video/') : getMediaType(item.preview) === 'video';
+    const el = document.createElement(isVideo ? 'video' : 'img');
+    el.src = item.preview;
+    if (isVideo) { el.muted = true; el.controls = false; }
+    el.loading = 'lazy';
+    grid.appendChild(el);
+  });
+}
 
-  const urlsPart = pendingMediaUrls.length > 0 ? pendingMediaUrls.join('\n') + '\n\n' : '';
-  const content = urlsPart + caption;
+async function handleCreateSubmit() {
+  const caption = document.getElementById('create-caption').value.trim();
+  if (!caption) { showError('create-error', 'Please write a caption'); return; }
+  if (pendingMediaFiles.length === 0) { showError('create-error', 'Please select a photo or video'); return; }
 
-  const btn = document.getElementById('modal-submit');
+  const btn = document.getElementById('create-modal-share');
   btn.disabled = true; btn.textContent = 'Sharing...';
+  hideError('create-error');
+
   try {
-    if (editingPostId) {
-      await api(`/posts/${editingPostId}`, { method: 'PUT', body: JSON.stringify({ title, content, published }) });
-    } else {
-      await api('/posts/', { method: 'POST', body: JSON.stringify({ title, content, published }) });
+    if (!cloudinaryConfig) cloudinaryConfig = await api('/upload-signature');
+
+    const urls = [];
+    for (const item of pendingMediaFiles) {
+      if (item.file) {
+        const isVideo = item.file.type.startsWith('video/');
+        const fd = new FormData();
+        fd.append('file', item.file);
+        fd.append('api_key', cloudinaryConfig.api_key);
+        fd.append('timestamp', cloudinaryConfig.timestamp);
+        fd.append('signature', cloudinaryConfig.signature);
+        if (cloudinaryConfig.upload_preset) fd.append('upload_preset', cloudinaryConfig.upload_preset);
+        fd.append('folder', cloudinaryConfig.folder);
+        const rt = isVideo ? 'video' : 'image';
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloud_name}/${rt}/upload`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+        urls.push(data.secure_url);
+      } else {
+        urls.push(item.preview);
+      }
     }
-    closeModal();
+
+    const urlsPart = urls.join('\n') + '\n\n';
+    const content = urlsPart + caption;
+
+    await api('/posts/', { method: 'POST', body: JSON.stringify({ title: caption, content, published: true }) });
+    closeCreateModal();
     currentPage = 1;
     loadFeed();
-  } catch (err) { showError('post-error', err.message); }
-  finally { btn.disabled = false; btn.textContent = editingPostId ? 'Save' : 'Share'; }
+  } catch (err) { showError('create-error', err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Share'; }
 }
 
-function openDeleteModal(postId) { deletingPostId = postId; hideError('delete-error'); document.getElementById('delete-overlay').classList.remove('hidden'); }
-function closeDeleteModal() { document.getElementById('delete-overlay').classList.add('hidden'); deletingPostId = null; hideError('delete-error'); }
+async function handleEditSubmit() {
+  if (!editingPostId) return;
+  const caption = document.getElementById('edit-caption').value.trim();
+  if (!caption) { showError('edit-error', 'Please write a caption'); return; }
+
+  const btn = document.getElementById('edit-modal-share');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  hideError('edit-error');
+
+  try {
+    if (!cloudinaryConfig) cloudinaryConfig = await api('/upload-signature');
+
+    const urls = [];
+    for (const item of editPendingMediaFiles) {
+      if (item.file) {
+        const isVideo = item.file.type.startsWith('video/');
+        const fd = new FormData();
+        fd.append('file', item.file);
+        fd.append('api_key', cloudinaryConfig.api_key);
+        fd.append('timestamp', cloudinaryConfig.timestamp);
+        fd.append('signature', cloudinaryConfig.signature);
+        if (cloudinaryConfig.upload_preset) fd.append('upload_preset', cloudinaryConfig.upload_preset);
+        fd.append('folder', cloudinaryConfig.folder);
+        const rt = isVideo ? 'video' : 'image';
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloud_name}/${rt}/upload`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+        urls.push(data.secure_url);
+      } else {
+        urls.push(item.preview);
+      }
+    }
+
+    const urlsPart = urls.join('\n') + '\n\n';
+    const content = urlsPart + caption;
+
+    await api(`/posts/${editingPostId}`, { method: 'PUT', body: JSON.stringify({ title: caption, content, published: true }) });
+    closeEditModal();
+    currentPage = 1;
+    loadFeed();
+  } catch (err) { showError('edit-error', err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
+
+function openDeleteModal(postId) {
+  deletingPostId = postId;
+  document.getElementById('delete-error').classList.add('hidden');
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').classList.add('hidden');
+  deletingPostId = null;
+}
+
 async function confirmDelete() {
   if (!deletingPostId) return;
-  hideError('delete-error');
   const btn = document.getElementById('delete-confirm');
   btn.disabled = true; btn.textContent = 'Deleting...';
   try { await api(`/posts/${deletingPostId}`, { method: 'DELETE' }); closeDeleteModal(); currentPage = 1; loadFeed(); }
@@ -516,6 +633,9 @@ async function openProfile() {
     const totalLikes = userPosts.reduce((sum, p) => sum + (p.votes || 0), 0);
     document.getElementById('profile-like-count').textContent = totalLikes;
   } catch { document.getElementById('profile-post-count').textContent = '0'; document.getElementById('profile-like-count').textContent = '0'; }
-  document.getElementById('profile-overlay').classList.remove('hidden');
+  document.getElementById('profile-modal').classList.remove('hidden');
 }
-function closeProfile() { document.getElementById('profile-overlay').classList.add('hidden'); }
+
+function closeProfileModal() {
+  document.getElementById('profile-modal').classList.add('hidden');
+}

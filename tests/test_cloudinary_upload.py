@@ -41,6 +41,28 @@ def test_upload_signature_returns_correct_structure(client, monkeypatch, folder)
     assert data["signature"] == expected_sig, "Signature does not match expected SHA1 hash"
 
 
+def test_upload_signature_without_preset(client, monkeypatch):
+    monkeypatch.setenv("CLOUDINARY_CLOUD_NAME", "testcloud")
+    monkeypatch.setenv("CLOUDINARY_API_KEY", "123456789")
+    monkeypatch.setenv("CLOUDINARY_API_SECRET", "test_api_secret_key_12345")
+
+    from app.config import Settings
+    test_settings = Settings()
+    test_settings.cloudinary_upload_preset = ""
+    monkeypatch.setattr("app.config.settings", test_settings)
+    monkeypatch.setattr("app.routers.cloudinary_upload.settings", test_settings)
+
+    res = client.get("/upload-signature")
+    assert res.status_code == 200
+    data = res.json()
+    assert "upload_preset" not in data
+    expected_params = f"folder=picto&timestamp={data['timestamp']}"
+    expected_sig = hashlib.sha1(
+        (expected_params + "test_api_secret_key_12345").encode()
+    ).hexdigest()
+    assert data["signature"] == expected_sig
+
+
 def test_upload_signature_defaults_folder(client, monkeypatch):
     monkeypatch.setenv("CLOUDINARY_CLOUD_NAME", "testcloud")
     monkeypatch.setenv("CLOUDINARY_API_KEY", "123456789")
