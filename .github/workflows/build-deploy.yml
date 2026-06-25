@@ -84,7 +84,7 @@ jobs:
       #   run: echo ${{steps.docker_build.outputs.digest}}
     
   deploy:
-    run-on: ubuntu-latest
+    runs-on: ubuntu-latest
     needs: [build]    #THe jobs that need to be ompleted before this job to execute - since jobs are executed in paralled
 
     steps:
