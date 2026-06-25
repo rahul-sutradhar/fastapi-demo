@@ -1,10 +1,6 @@
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
-from . import models
-from .database import engine
 from .routers import post, user, auth, vote, cloudinary_upload
 
 from .config import settings
@@ -13,16 +9,10 @@ from .config import settings
 print(settings.database_username)
 
 
-# It tells SQL-Alchemy to run the create statements to generate all the tables when it fast started up
-# models.Base.metadata.create_all(bind=engine)
-
-# Now, the above line of code is note required, since, we already have alembic
-
 app = FastAPI()
 
-# CORS - Cross Origin Resource Sharing
 
-origins = ["*"]     #List of domains that are allowed to access ("*" means all)
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,31 +23,13 @@ app.add_middleware(
 )
 
 
-# my_posts = [{"title": "title of post 1", "content": "ontent of post 1", "id": 1}, {"title": "favourite foods", "content": "I like pizza", "id": 2}]
-
-# def find_post(id):
-#     for p in my_posts:
-#         if p["id"] == id:
-#             return p
-
-# def find_index_post(id):
-#     for i, p in enumerate(my_posts):
-#         if p['id'] == id:
-#             return i
-
-
-
-# Imports all the respective routes
 app.include_router(post.router)
 app.include_router(user.router)
 app.include_router(auth.router)
 app.include_router(vote.router)
 app.include_router(cloudinary_upload.router)
 
-@app.get("/")
-def root():    #The function name doesn't matter
-    return {"message": "Welcome to my API. Successfully deployed CI/CD pipeline."}
 
-frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-if frontend_dir.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+@app.get("/")
+def root():
+    return {"message": "Welcome to my API. Successfully deployed CI/CD pipeline."}
