@@ -1,0 +1,49 @@
+version: "3.8"        # Upgraded to 3.8 to support modern depends_on conditions
+services:
+  api:
+    build: . # "." means current directory
+    depends_on:
+      postgres:
+        condition: service_healthy # Ensures api waits until postgres is 100% ready
+    ports:
+      # Format: <port on localhost>:<port on container>
+      - 8000:8000
+    volumes:
+      - ./:/usr/src/app:ro
+    # env_file:       # Approach-1
+    #     - ./.env
+    environment:      # Approach-2
+      # - DATABASE_HOSTNAME=localhost
+      - DATABASE_HOSTNAME=postgres    #Service name (mentioned below)
+      - DATABASE_PORT=5432
+      - DATABASE_PASSWORD=postgres
+      - DATABASE_NAME=fastapi
+      - DATABASE_USERNAME=postgres
+      - SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    
+    command: >
+      sh -c "alembic upgrade head && 
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fastapi
+    
+    volumes:
+      - postgres-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fastapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+        
+volumes:
+      postgres-db:
+
+# NOTE: Docker-compose can't detect any changes made.
+# Therefore, it is required to build the image again
