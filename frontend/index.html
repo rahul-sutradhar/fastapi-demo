@@ -3,14 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FastAPI Social - Login</title>
+  <title>Picto</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="auth-page">
   <div class="auth-container">
     <div class="auth-card">
-      <h1>FastAPI Social</h1>
-      <p class="auth-subtitle">Connect. Share. Vote.</p>
+      <div class="auth-logo">
+        <div class="logo-icon">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <rect x="2" y="2" width="36" height="36" rx="10" stroke="currentColor" stroke-width="3"/>
+            <circle cx="20" cy="20" r="8" stroke="currentColor" stroke-width="3"/>
+            <circle cx="30" cy="10" r="2.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <h1>Picto</h1>
+      </div>
 
       <div class="tab-bar">
         <button class="tab active" data-tab="login">Sign In</button>
@@ -19,12 +27,10 @@
 
       <form id="login-form" class="auth-form active">
         <div class="form-group">
-          <label for="login-email">Email</label>
-          <input type="email" id="login-email" placeholder="you@example.com" required>
+          <input type="email" id="login-email" placeholder="Email" required>
         </div>
         <div class="form-group">
-          <label for="login-password">Password</label>
-          <input type="password" id="login-password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required>
+          <input type="password" id="login-password" placeholder="Password" required>
         </div>
         <div class="form-error" id="login-error"></div>
         <button type="submit" class="btn btn-primary btn-full">Sign In</button>
@@ -32,23 +38,19 @@
 
       <form id="register-form" class="auth-form">
         <div class="form-group">
-          <label for="register-email">Email</label>
-          <input type="email" id="register-email" placeholder="you@example.com" required>
+          <input type="email" id="register-email" placeholder="Email" required>
         </div>
         <div class="form-group">
-          <label for="register-password">Password</label>
-          <input type="password" id="register-password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required>
+          <input type="password" id="register-password" placeholder="Password" required>
         </div>
         <div class="form-group">
-          <label for="register-confirm">Confirm Password</label>
-          <input type="password" id="register-confirm" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required>
+          <input type="password" id="register-confirm" placeholder="Confirm Password" required>
         </div>
         <div class="form-error" id="register-error"></div>
-        <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+        <button type="submit" class="btn btn-primary btn-full">Sign Up</button>
       </form>
     </div>
   </div>
-
   <script src="app.js"></script>
 </body>
 </html>
