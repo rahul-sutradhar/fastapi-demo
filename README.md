@@ -3,10 +3,11 @@ title: "Fast API Project"
 emoji: "🚀"
 colorFrom: "blue"
 colorTo: "green"
-sdk: "python"
-sdk_version: "3.12.7"
+sdk: "docker"
 python_version: "3.12"
 app_file: "app/main.py"
+app_port: 8000
+short_description: "FastAPI app with authentication, posts, and votes"
 pinned: false
 ---
 
