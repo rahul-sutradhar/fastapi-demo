@@ -12,7 +12,7 @@ on: [push, pull_request]
 # env:    #Common for all jobs
 #   DATABASE_HOSTNAME: localhost
 jobs:
-  job1:
+  build:
     environment:
       name: testing
     env:    #Only for this job1
@@ -55,28 +55,38 @@ jobs:
         run: |
           pip install pytest
           pytest
-      
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{secrets.DOCKER_HUB_USERNAME}}
-          password: ${{secrets.DOCKER_HUB_ACCESS_TOKEN}}
-      
-      - name: Set up Docker buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v1
 
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
-        with:
-          context: ./
-          file: ./Dockerfile
-          builder: ${{steps.buildx.outputs.name}}
-          push: true
-          tags: ${{secrets.DOCKER_HUB_USERNAME}}/fastapi:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+## To push the code to docker hub - container
 
-      - name: Image digest
-        run: echo ${{steps.docker_build.outputs.digest}}
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v1
+      #   with:
+      #     username: ${{secrets.DOCKER_HUB_USERNAME}}
+      #     password: ${{secrets.DOCKER_HUB_ACCESS_TOKEN}}
+      
+      # - name: Set up Docker buildx
+      #   id: buildx
+      #   uses: docker/setup-buildx-action@v1
+
+      # - name: Build and push
+      #   id: docker_build
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: ./
+      #     file: ./Dockerfile
+      #     builder: ${{steps.buildx.outputs.name}}
+      #     push: true
+      #     tags: ${{secrets.DOCKER_HUB_USERNAME}}/fastapi:latest
+      #     cache-from: type=local,src=/tmp/.buildx-cache
+      #     cache-to: type=local,dest=/tmp/.buildx-cache
+
+      # - name: Image digest
+      #   run: echo ${{steps.docker_build.outputs.digest}}
+    
+  deploy:
+    run-on: ubuntu-latest
+    needs: [build]    #THe jobs that need to be ompleted before this job to execute - since jobs are executed in paralled
+
+    steps:
+      - name: deploying stuff
+        run: echo "going to deploy some stuff"
