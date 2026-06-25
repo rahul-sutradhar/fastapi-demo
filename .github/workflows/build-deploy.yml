@@ -88,5 +88,5 @@ jobs:
     needs: [build]    #THe jobs that need to be ompleted before this job to execute - since jobs are executed in paralled
 
     steps:
-      - name: deploying stuff
+      - name: deploying stuff for production
         run: echo "going to deploy some stuff"
