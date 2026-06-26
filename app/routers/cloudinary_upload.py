@@ -3,6 +3,7 @@ import hashlib
 from fastapi import APIRouter, HTTPException
 from app.config import settings
 
+# Minimal backend update to trigger redeploy via GitHub Actions
 router = APIRouter(tags=["Cloudinary Upload"])
 
 @router.get("/upload-signature")
