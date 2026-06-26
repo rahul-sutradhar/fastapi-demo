@@ -1,6 +1,9 @@
-const API_BASE = (!window.location.hostname || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:8000'
-  : 'https://rs-1234-fastapi-demo.hf.space';
+const API_BASE = (() => {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:8000';
+  }
+  return 'https://rs-1234-fastapi-demo.hf.space';
+})();
 
 let cloudinaryConfig = null;
 let currentUser = null;
