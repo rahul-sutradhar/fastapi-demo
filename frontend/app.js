@@ -222,50 +222,6 @@ function initDashboard() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { searchQuery = e.target.value; currentPage = 1; loadFeed(); }, 350);
   });
-
-  // Pull-to-refresh
-  let ptrTouchStart = 0;
-  let ptrPulling = false;
-  let ptrOffset = 0;
-  const ptrThreshold = 60;
-  const feedContainer = document.getElementById('feed-page');
-  const ptrIndicator = document.getElementById('ptr-indicator');
-  feedContainer.addEventListener('touchstart', (e) => {
-    if (window.scrollY > 0) return;
-    ptrTouchStart = e.touches[0].clientY;
-    ptrPulling = false;
-    ptrOffset = 0;
-  }, { passive: true });
-  feedContainer.addEventListener('touchmove', (e) => {
-    if (window.scrollY > 0) return;
-    const dy = e.touches[0].clientY - ptrTouchStart;
-    if (dy <= 0) { ptrOffset = 0; ptrPulling = false; return; }
-    ptrPulling = true;
-    ptrOffset = Math.min(dy * 0.5, 120);
-    ptrIndicator.style.transform = `translateY(${ptrOffset}px)`;
-    ptrIndicator.classList.toggle('ptr-ready', ptrOffset >= ptrThreshold);
-    ptrIndicator.querySelector('.ptr-text').textContent = ptrOffset >= ptrThreshold ? 'Release to refresh' : 'Pull to refresh';
-  }, { passive: true });
-  feedContainer.addEventListener('touchend', () => {
-    if (!ptrPulling) return;
-    ptrPulling = false;
-    if (ptrOffset >= ptrThreshold) {
-      ptrIndicator.classList.add('ptr-refreshing');
-      ptrIndicator.querySelector('.ptr-text').textContent = 'Refreshing...';
-      ptrIndicator.querySelector('.ptr-spinner').classList.add('spin');
-      loadFeed();
-      setTimeout(() => {
-        ptrIndicator.classList.remove('ptr-refreshing');
-        ptrIndicator.querySelector('.ptr-spinner').classList.remove('spin');
-        ptrIndicator.style.transform = '';
-        ptrIndicator.querySelector('.ptr-text').textContent = 'Pull to refresh';
-      }, 1000);
-    } else {
-      ptrIndicator.style.transform = '';
-    }
-    ptrOffset = 0;
-  }, { passive: true });
-
   loadFeed();
 }
 

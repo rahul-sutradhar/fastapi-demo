@@ -36,7 +36,6 @@ def get_posts(db: Session = Depends(get_db), current_user: int = Depends(oauth2.
     .outerjoin(vote_subq, vote_subq.c.post_id == models.Post.id)
     .outerjoin(comment_subq, comment_subq.c.post_id == models.Post.id)
     .filter(models.Post.title.contains(search))
-    .order_by(models.Post.created_at.desc())
     .limit(limit)
     .offset(skip)
     .all())
