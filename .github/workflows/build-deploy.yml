@@ -1,7 +1,7 @@
 name: Build and Deploy Code
 
-on: [push, pull_request]
-  # push:
+on: [push, pull_request]        #Approach-1
+  # push:                   #Approach-2
   #   branches: # ["main"]
   #     - "main"
   #     - "anotherbranch"
