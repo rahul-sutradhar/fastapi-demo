@@ -21,6 +21,12 @@
         <button class="header-link" id="new-post-btn">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         </button>
+        <button class="header-link header-notif-btn" id="header-notif-btn">
+          <div class="notif-bell-wrap">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="notif-dot hidden" id="notif-dot"></span>
+          </div>
+        </button>
         <div class="avatar-dropdown">
           <button class="avatar-btn" id="avatar-btn">
             <div class="avatar avatar-sm" id="header-avatar">U</div>
@@ -36,7 +42,11 @@
     </div>
   </header>
 
-  <main class="feed-container">
+  <main class="feed-container" id="feed-page">
+    <div class="ptr-indicator" id="ptr-indicator">
+      <div class="ptr-spinner"></div>
+      <span class="ptr-text">Pull to refresh</span>
+    </div>
     <div class="loading" id="loading">
       <div class="spinner"></div>
     </div>
@@ -55,8 +65,11 @@
     <button class="bottom-nav-item" id="bottom-create">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
     </button>
-    <button class="bottom-nav-item" id="bottom-activity">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    <button class="bottom-nav-item" id="bottom-notif">
+      <div class="notif-bell-wrap">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-dot hidden" id="notif-dot-bottom"></span>
+      </div>
     </button>
     <button class="bottom-nav-item" id="bottom-profile">
       <div class="avatar avatar-xs" id="bottom-avatar">U</div>
@@ -66,31 +79,41 @@
   <div class="modal-overlay hidden" id="create-modal">
     <div class="create-modal">
       <div class="create-modal-header">
-        <button class="create-modal-back" id="create-modal-back">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+        <button class="create-modal-close" id="create-modal-close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        <span class="create-modal-title">New post</span>
-        <button class="create-modal-share" id="create-modal-share">Share</button>
+        <span class="create-modal-title" id="create-modal-title">New post</span>
+        <button class="create-modal-next" id="create-modal-next" disabled>Next</button>
+        <button class="create-modal-share hidden" id="create-modal-share">Share</button>
       </div>
-      <div class="create-modal-body">
-        <div class="create-preview-area" id="create-preview-area">
-          <div class="create-preview-placeholder" id="create-preview-placeholder">
-            <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#b2b2b2" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
-            <button class="create-select-btn" id="create-select-btn">Select from computer</button>
-            <input type="file" id="media-input" accept="image/*,video/*" multiple hidden>
+      <div class="create-modal-body" id="create-modal-body">
+        <div class="create-step-select" id="create-step-select">
+          <div class="create-preview-selected hidden" id="create-preview-selected"></div>
+          <div class="create-placeholder-icon" id="create-placeholder-icon">
+            <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#b2b2b2" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
           </div>
-          <div class="create-preview-content hidden" id="create-preview-content">
-            <div class="create-preview-grid" id="create-preview-grid"></div>
+          <div class="create-placeholder-text" id="create-placeholder-text">Drag photos and videos here</div>
+          <button class="create-select-btn" id="create-select-btn">Select from computer</button>
+          <input type="file" id="media-input" accept="image/*,video/*" multiple hidden>
+        </div>
+        <div class="create-step-details hidden" id="create-step-details">
+          <div class="create-preview-wrap">
+            <div class="create-preview-grid" id="create-preview-grid">
+              <div class="create-preview-slot">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b2b2b2" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+                <span>Add media</span>
+              </div>
+            </div>
             <button class="create-change-btn" id="create-change-btn">Change</button>
           </div>
-        </div>
-        <div class="create-details" id="create-details">
-          <div class="create-user-row">
-            <div class="avatar avatar-sm" id="create-user-avatar">U</div>
-            <span class="create-username" id="create-username">username</span>
+          <div class="create-details-sidebar">
+            <div class="create-user-row">
+              <div class="avatar avatar-sm" id="create-user-avatar">U</div>
+              <span class="create-username" id="create-username">username</span>
+            </div>
+            <textarea class="create-caption-input" id="create-caption" rows="4" placeholder="Write a caption..."></textarea>
+            <div class="create-error hidden" id="create-error"></div>
           </div>
-          <textarea class="create-caption-input" id="create-caption" rows="4" placeholder="Write a caption..."></textarea>
-          <div class="create-error hidden" id="create-error"></div>
         </div>
       </div>
     </div>
@@ -137,28 +160,87 @@
     </div>
   </div>
 
-  <div class="modal-overlay hidden" id="profile-modal">
-    <div class="modal-box">
-      <div class="modal-box-title">Profile</div>
-      <div class="profile-card">
-        <div class="profile-avatar">
-          <div class="avatar avatar-lg" id="profile-avatar">U</div>
+  <section class="profile-page hidden" id="profile-page">
+    <div class="profile-header">
+      <div class="profile-header-top">
+        <button class="profile-back" id="profile-back">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+      </div>
+      <div class="profile-header-main">
+        <div class="profile-pic-col">
+          <div class="profile-pic" id="profile-pic">
+            <div class="avatar avatar-xl" id="profile-avatar">U</div>
+          </div>
         </div>
-        <div class="profile-email" id="profile-email">user@example.com</div>
-        <div class="profile-stats">
-          <div class="stat">
-            <span class="stat-value" id="profile-post-count">0</span>
-            <span class="stat-label">posts</span>
+        <div class="profile-info-col">
+          <div class="profile-username-row">
+            <span class="profile-username" id="profile-username">user</span>
           </div>
-          <div class="stat">
-            <span class="stat-value" id="profile-like-count">0</span>
-            <span class="stat-label">likes</span>
+          <div class="profile-stats-row">
+            <span class="profile-stat"><strong id="profile-post-count">0</strong> posts</span>
+            <span class="profile-stat"><strong id="profile-follower-count">0</strong> followers</span>
+            <span class="profile-stat"><strong id="profile-following-count">0</strong> following</span>
           </div>
+          <div class="profile-bio" id="profile-bio"></div>
         </div>
       </div>
-      <button class="modal-box-btn" id="profile-close-btn">Close</button>
+    </div>
+    <div class="profile-tabs">
+      <button class="profile-tab active" id="profile-tab-posts">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        POSTS
+      </button>
+    </div>
+    <div class="profile-posts" id="profile-posts"></div>
+  </section>
+
+  <div class="modal-overlay hidden" id="comments-modal">
+    <div class="comments-sheet">
+      <div class="comments-header">
+        <span class="comments-header-title">Comments</span>
+        <button class="comments-header-close" id="comments-close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="comments-body" id="comments-body">
+        <div class="comments-loading" id="comments-loading"><div class="spinner"></div></div>
+        <div class="comments-list" id="comments-list"></div>
+      </div>
+      <div class="comments-input-bar">
+        <textarea class="comments-input" id="comments-input" rows="1" placeholder="Add a comment..."></textarea>
+        <button class="comments-post-btn" id="comments-post-btn">Post</button>
+      </div>
+      <div class="comments-reply-to hidden" id="comments-reply-to">
+        <span>Replying to <strong id="comments-reply-username">@user</strong></span>
+        <button id="comments-cancel-reply">Cancel</button>
+      </div>
     </div>
   </div>
+
+  <div class="modal-overlay hidden" id="notif-modal">
+    <div class="notif-sheet">
+      <div class="notif-header">
+        <span class="notif-header-title">Notifications</span>
+        <div class="notif-header-actions">
+          <button class="notif-mark-read-btn hidden" id="notif-mark-all-read">Mark all read</button>
+          <button class="notif-header-close" id="notif-close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="notif-body" id="notif-body">
+        <div class="notif-loading" id="notif-loading"><div class="spinner"></div></div>
+        <div class="notif-list" id="notif-list"></div>
+        <div class="notif-empty hidden" id="notif-empty">
+          <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#b2b2b2" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>No notifications yet.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="notif-toast-container"></div>
 
   <script src="app.js"></script>
 </body>

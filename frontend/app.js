@@ -1,4 +1,4 @@
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+const API_BASE = (!window.location.hostname || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
   : 'https://rs-1234-fastapi-demo.hf.space';
 
@@ -13,6 +13,7 @@ let pendingMediaFiles = [];
 let editPendingMediaFiles = [];
 const MAX_MEDIA = 5;
 const votedPosts = new Set();
+let activePage = 'feed';
 
 const GRADIENT_COLORS = [
   ['#405de6', '#5851db', '#833ab4'],
@@ -37,7 +38,8 @@ function clearToken() {
 
 async function api(endpoint, options = {}) {
   const token = getToken();
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const headers = { ...options.headers };
+  if (options.body) headers['Content-Type'] = 'application/json';
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
   const text = await res.text();
@@ -122,9 +124,11 @@ function initAuth() {
     const btn = loginForm.querySelector('button');
     btn.disabled = true; btn.textContent = 'Signing in...';
     try {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
       const fd = new URLSearchParams();
-      fd.append('username', document.getElementById('login-email').value);
-      fd.append('password', document.getElementById('login-password').value);
+      fd.append('username', email);
+      fd.append('password', password);
       const res = await fetch(`${API_BASE}/login`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Login failed');
@@ -138,12 +142,13 @@ function initAuth() {
     hideError('register-error');
     const pw = document.getElementById('register-password').value;
     if (pw !== document.getElementById('register-confirm').value) { showError('register-error', 'Passwords do not match'); return; }
+    const email = document.getElementById('register-email').value.trim();
     const btn = registerForm.querySelector('button');
     btn.disabled = true; btn.textContent = 'Signing up...';
     try {
-      await api('/users/', { method: 'POST', body: JSON.stringify({ email: document.getElementById('register-email').value, password: pw }) });
+      await api('/users/', { method: 'POST', body: JSON.stringify({ email, password: pw }) });
       const fd = new URLSearchParams();
-      fd.append('username', document.getElementById('register-email').value); fd.append('password', pw);
+      fd.append('username', email); fd.append('password', pw);
       const res = await fetch(`${API_BASE}/login`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Login failed');
@@ -158,18 +163,26 @@ function initDashboard() {
   if (!getToken()) { window.location.href = 'index.html'; return; }
   fetchCurrentUser();
   document.getElementById('logout-btn').addEventListener('click', () => { clearToken(); window.location.href = 'index.html'; });
+  document.getElementById('profile-back').addEventListener('click', showFeedSection);
   document.getElementById('profile-btn').addEventListener('click', () => { document.getElementById('dropdown-menu').classList.add('hidden'); openProfile(); });
   document.getElementById('avatar-btn').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('dropdown-menu').classList.toggle('hidden'); });
   document.addEventListener('click', () => { document.getElementById('dropdown-menu').classList.add('hidden'); });
-  document.getElementById('new-post-btn').addEventListener('click', () => openCreateModal());
-  document.getElementById('bottom-home').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  document.getElementById('new-post-btn').addEventListener('click', () => { showFeedSection(); openCreateModal(); });
+  document.getElementById('bottom-home').addEventListener('click', () => { showFeedSection(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   document.getElementById('bottom-search').addEventListener('click', () => {
+    showFeedSection();
     document.getElementById('search-input').focus();
   });
-  document.getElementById('bottom-create').addEventListener('click', () => openCreateModal());
-  document.getElementById('bottom-activity').addEventListener('click', () => openProfile());
+  document.getElementById('bottom-create').addEventListener('click', () => { showFeedSection(); openCreateModal(); });
+  document.getElementById('bottom-notif').addEventListener('click', () => openNotifications());
   document.getElementById('bottom-profile').addEventListener('click', () => openProfile());
-  document.getElementById('create-modal-back').addEventListener('click', closeCreateModal);
+  document.getElementById('header-notif-btn').addEventListener('click', () => openNotifications());
+  document.getElementById('notif-close').addEventListener('click', closeNotifications);
+  document.getElementById('notif-mark-all-read').addEventListener('click', markAllNotificationsRead);
+  document.getElementById('notif-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeNotifications(); });
+  document.getElementById('notif-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeNotifications(); });
+  document.getElementById('create-modal-close').addEventListener('click', closeCreateModal);
+  document.getElementById('create-modal-next').addEventListener('click', goToDetailsStep);
   document.getElementById('create-modal-share').addEventListener('click', handleCreateSubmit);
   document.getElementById('create-select-btn').addEventListener('click', () => {
     document.getElementById('media-input').value = '';
@@ -189,16 +202,70 @@ function initDashboard() {
   document.getElementById('edit-media-input').addEventListener('change', handleEditMediaSelect);
   document.getElementById('delete-cancel').addEventListener('click', closeDeleteModal);
   document.getElementById('delete-confirm').addEventListener('click', confirmDelete);
-  document.getElementById('profile-close-btn').addEventListener('click', closeProfileModal);
   document.getElementById('create-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCreateModal(); });
   document.getElementById('edit-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeEditModal(); });
   document.getElementById('delete-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeDeleteModal(); });
-  document.getElementById('profile-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeProfileModal(); });
+  document.getElementById('comments-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCommentsModal(); });
+  document.getElementById('comments-close').addEventListener('click', closeCommentsModal);
+  document.getElementById('comments-post-btn').addEventListener('click', handleCommentSubmit);
+  document.getElementById('comments-cancel-reply').addEventListener('click', cancelReply);
+  document.getElementById('comments-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCommentSubmit(); }
+  });
+  document.getElementById('comments-input').addEventListener('input', () => {
+    const el = document.getElementById('comments-input');
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 80) + 'px';
+  });
   let searchTimer;
   document.getElementById('search-input').addEventListener('input', (e) => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { searchQuery = e.target.value; currentPage = 1; loadFeed(); }, 350);
   });
+
+  // Pull-to-refresh
+  let ptrTouchStart = 0;
+  let ptrPulling = false;
+  let ptrOffset = 0;
+  const ptrThreshold = 60;
+  const feedContainer = document.getElementById('feed-page');
+  const ptrIndicator = document.getElementById('ptr-indicator');
+  feedContainer.addEventListener('touchstart', (e) => {
+    if (window.scrollY > 0) return;
+    ptrTouchStart = e.touches[0].clientY;
+    ptrPulling = false;
+    ptrOffset = 0;
+  }, { passive: true });
+  feedContainer.addEventListener('touchmove', (e) => {
+    if (window.scrollY > 0) return;
+    const dy = e.touches[0].clientY - ptrTouchStart;
+    if (dy <= 0) { ptrOffset = 0; ptrPulling = false; return; }
+    ptrPulling = true;
+    ptrOffset = Math.min(dy * 0.5, 120);
+    ptrIndicator.style.transform = `translateY(${ptrOffset}px)`;
+    ptrIndicator.classList.toggle('ptr-ready', ptrOffset >= ptrThreshold);
+    ptrIndicator.querySelector('.ptr-text').textContent = ptrOffset >= ptrThreshold ? 'Release to refresh' : 'Pull to refresh';
+  }, { passive: true });
+  feedContainer.addEventListener('touchend', () => {
+    if (!ptrPulling) return;
+    ptrPulling = false;
+    if (ptrOffset >= ptrThreshold) {
+      ptrIndicator.classList.add('ptr-refreshing');
+      ptrIndicator.querySelector('.ptr-text').textContent = 'Refreshing...';
+      ptrIndicator.querySelector('.ptr-spinner').classList.add('spin');
+      loadFeed();
+      setTimeout(() => {
+        ptrIndicator.classList.remove('ptr-refreshing');
+        ptrIndicator.querySelector('.ptr-spinner').classList.remove('spin');
+        ptrIndicator.style.transform = '';
+        ptrIndicator.querySelector('.ptr-text').textContent = 'Pull to refresh';
+      }, 1000);
+    } else {
+      ptrIndicator.style.transform = '';
+    }
+    ptrOffset = 0;
+  }, { passive: true });
+
   loadFeed();
 }
 
@@ -218,21 +285,26 @@ async function fetchCurrentUser() {
       document.getElementById('edit-username').textContent = currentUser.email.split('@')[0];
       document.getElementById('bottom-avatar').textContent = initial;
     }
-  } catch {}
+  } catch (e) { console.warn('fetchCurrentUser:', e); }
 }
 
 async function loadFeed() {
   const feed = document.getElementById('feed');
   const loading = document.getElementById('loading');
   const errorBanner = document.getElementById('error-banner');
-  loading.classList.remove('hidden'); feed.innerHTML = ''; hideError(errorBanner);
+  loading.style.display = ''; loading.classList.remove('hidden'); feed.innerHTML = ''; hideError(errorBanner);
   try {
     const skip = (currentPage - 1) * PAGE_SIZE;
-    const data = await api(`/posts/?limit=${PAGE_SIZE}&skip=${skip}&search=${encodeURIComponent(searchQuery)}`);
-    loading.style.display = 'none';
+    const [data, votedIds] = await Promise.all([
+      api(`/posts/?limit=${PAGE_SIZE}&skip=${skip}&search=${encodeURIComponent(searchQuery)}`),
+      api('/vote/my').catch(() => [])
+    ]);
+    votedPosts.clear();
+    votedIds.forEach(id => votedPosts.add(id));
+    loading.classList.add('hidden');
     if (!data || data.length === 0) { feed.innerHTML = '<div class="feed-end">No posts yet. Be the first to share!</div>'; return; }
     renderFeed(data);
-  } catch (err) { loading.style.display = 'none'; showError(errorBanner, err.message); }
+  } catch (err) { loading.classList.add('hidden'); showError(errorBanner, err.message); }
 }
 
 function renderFeed(posts) {
@@ -262,15 +334,28 @@ function renderFeed(posts) {
         mediaHtml = `<img class="post-display-img" src="${url}" alt="${escHtml(p.title)}" loading="lazy">`;
       }
     } else if (mediaUrls.length > 1) {
-      let items = '';
-      mediaUrls.forEach((u) => {
+      const carouselId = `carousel-${p.id}`;
+      let slides = '';
+      mediaUrls.forEach((u, idx) => {
         const eu = escHtml(u);
         const t = getMediaType(u);
-        if (t === 'video') items += `<div style="overflow:hidden;aspect-ratio:1"><video src="${eu}" style="width:100%;height:100%;object-fit:cover" controls preload="metadata"></video></div>`;
-        else items += `<div style="overflow:hidden;aspect-ratio:1"><img src="${eu}" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>`;
+        if (t === 'video') {
+          slides += `<div class="carousel-slide"><video src="${eu}" controls preload="metadata"></video></div>`;
+        } else {
+          slides += `<div class="carousel-slide"><img src="${eu}" alt="${escHtml(p.title)}" loading="lazy"></div>`;
+        }
       });
-      const cols = mediaUrls.length === 2 ? 2 : 2;
-      mediaHtml = `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:2px;background:var(--bg)">${items}</div>`;
+      let dots = '';
+      mediaUrls.forEach((_, idx) => {
+        dots += `<button class="carousel-dot${idx === 0 ? ' active' : ''}" data-idx="${idx}" aria-label="Go to slide ${idx + 1}"></button>`;
+      });
+      mediaHtml = `
+        <div class="carousel" id="${carouselId}">
+          <div class="carousel-track">${slides}</div>
+          <button class="carousel-arrow carousel-arrow-left" aria-label="Previous"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+          <button class="carousel-arrow carousel-arrow-right" aria-label="Next"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+          <div class="carousel-dots">${dots}</div>
+        </div>`;
     } else {
       mediaHtml = `<div class="post-display-img" style="background:${gradientStr};display:flex;align-items:center;justify-content:center;aspect-ratio:1;font-size:72px;font-weight:700;color:rgba(255,255,255,0.3)">${p.title.charAt(0).toUpperCase()}</div>`;
     }
@@ -301,7 +386,7 @@ function renderFeed(posts) {
           <button class="action-btn like-btn${actionBarLiked}" data-post-id="${p.id}">
             <svg width="22" height="22" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" ${heartSvgFill} stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
           </button>
-          <button class="action-btn">
+          <button class="action-btn comment-btn" data-post-id="${p.id}">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </button>
           <button class="action-btn">
@@ -314,6 +399,7 @@ function renderFeed(posts) {
       </div>
       <div class="post-likes-row">${voteCount} ${voteCount === 1 ? 'like' : 'likes'}</div>
       <div class="post-caption-row"><span class="caption-username">${escHtml(username)}</span> ${escHtml(p.title)}${captionText ? ' — ' + escHtml(captionText) : ''}</div>
+      <div class="post-comments-link" data-post-id="${p.id}">${p.comment_count > 0 ? `View all ${p.comment_count} comments` : 'Add a comment...'}</div>
       <div class="post-time">${timeAgo(p.created_at).toUpperCase()} AGO</div>
       ${isOwner ? `<div class="post-owner-badges"><button class="post-owner-badge edit-btn" data-post-id="${p.id}">Edit</button><button class="post-owner-badge danger delete-btn" data-post-id="${p.id}">Delete</button></div>` : ''}`;
 
@@ -343,6 +429,29 @@ function renderFeed(posts) {
     if (editBtn) editBtn.addEventListener('click', () => openEditModal(p));
     const delBtn = card.querySelector('.delete-btn');
     if (delBtn) delBtn.addEventListener('click', () => openDeleteModal(p.id));
+    const commentBtns = card.querySelectorAll('.comment-btn, .post-comments-link');
+    commentBtns.forEach(btn => btn.addEventListener('click', () => openCommentsModal(p.id)));
+    const carousel = card.querySelector('.carousel');
+    if (carousel) {
+      const track = carousel.querySelector('.carousel-track');
+      const dots = carousel.querySelectorAll('.carousel-dot');
+      const leftBtn = carousel.querySelector('.carousel-arrow-left');
+      const rightBtn = carousel.querySelector('.carousel-arrow-right');
+      function updateCarousel() {
+        const idx = Math.round(track.scrollLeft / track.clientWidth);
+        dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+        leftBtn.classList.toggle('hidden', idx === 0);
+        rightBtn.classList.toggle('hidden', idx === dots.length - 1);
+      }
+      track.addEventListener('scroll', updateCarousel);
+      leftBtn.addEventListener('click', (e) => { e.stopPropagation(); track.scrollBy({ left: -track.clientWidth, behavior: 'smooth' }); });
+      rightBtn.addEventListener('click', (e) => { e.stopPropagation(); track.scrollBy({ left: track.clientWidth, behavior: 'smooth' }); });
+      dots.forEach(d => d.addEventListener('click', (e) => {
+        e.stopPropagation();
+        track.scrollTo({ left: parseInt(d.dataset.idx) * track.clientWidth, behavior: 'smooth' });
+      }));
+      updateCarousel();
+    }
     feed.appendChild(card);
   });
   document.getElementById('feed-end').textContent = posts.length < PAGE_SIZE ? "You've reached the end" : '';
@@ -401,11 +510,17 @@ function openCreateModal() {
   pendingMediaFiles = [];
   document.getElementById('create-caption').value = '';
   document.getElementById('create-error').classList.add('hidden');
-  document.getElementById('create-preview-placeholder').classList.remove('hidden');
-  document.getElementById('create-preview-content').classList.remove('visible');
+  document.getElementById('create-step-select').classList.remove('hidden');
+  document.getElementById('create-step-details').classList.add('hidden');
   document.getElementById('create-preview-grid').innerHTML = '';
-  document.getElementById('create-modal-share').disabled = false;
-  document.getElementById('create-modal-share').textContent = 'Share';
+  document.getElementById('create-preview-selected').innerHTML = '';
+  document.getElementById('create-preview-selected').classList.add('hidden');
+  document.getElementById('create-placeholder-icon').classList.remove('hidden');
+  document.getElementById('create-placeholder-text').classList.remove('hidden');
+  document.getElementById('create-modal-next').classList.remove('hidden');
+  document.getElementById('create-modal-share').classList.add('hidden');
+  document.getElementById('create-modal-next').disabled = true;
+  document.getElementById('create-modal-title').textContent = 'New post';
   document.getElementById('media-input').value = '';
   document.getElementById('create-modal').classList.remove('hidden');
 }
@@ -414,6 +529,12 @@ function closeCreateModal() {
   document.getElementById('create-modal').classList.add('hidden');
   pendingMediaFiles.forEach(item => { if (item.file) URL.revokeObjectURL(item.preview); });
   pendingMediaFiles = [];
+}
+
+function showFeedSection() {
+  document.getElementById('feed-page').classList.remove('hidden');
+  document.getElementById('profile-page').classList.add('hidden');
+  activePage = 'feed';
 }
 
 function openEditModal(post) {
@@ -460,23 +581,69 @@ function handleCreateMediaSelect(e) {
     pendingMediaFiles.push({ file, preview });
   }
 
-  buildCreatePreviewGrid(pendingMediaFiles);
-  document.getElementById('create-preview-placeholder').classList.add('hidden');
-  document.getElementById('create-preview-content').classList.add('visible');
+  buildCreatePreviewGrid(pendingMediaFiles, 'create-preview-selected', true);
+  buildCreatePreviewGrid(pendingMediaFiles, 'create-preview-grid', true);
+  document.getElementById('create-placeholder-icon').classList.add('hidden');
+  document.getElementById('create-placeholder-text').classList.add('hidden');
+  document.getElementById('create-preview-selected').classList.remove('hidden');
+  document.getElementById('create-modal-next').disabled = false;
 }
 
-function buildCreatePreviewGrid(items) {
-  const grid = document.getElementById('create-preview-grid');
+function goToDetailsStep() {
+  if (pendingMediaFiles.length === 0) return;
+  buildCreatePreviewGrid(pendingMediaFiles, 'create-preview-grid', true);
+  updateCreateChangeButton();
+  document.getElementById('create-step-select').classList.add('hidden');
+  document.getElementById('create-step-details').classList.remove('hidden');
+  document.getElementById('create-modal-next').classList.add('hidden');
+  document.getElementById('create-modal-share').classList.remove('hidden');
+  document.getElementById('create-modal-title').textContent = 'New post';
+}
+
+function updateCreateChangeButton() {
+  const btn = document.getElementById('create-change-btn');
+  if (!btn) return;
+  btn.textContent = pendingMediaFiles.length < MAX_MEDIA ? 'Add' : 'Change';
+}
+
+function buildCreatePreviewGrid(items, gridId = 'create-preview-grid', allowRemove = false) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
   grid.innerHTML = '';
   grid.className = 'create-preview-grid';
   if (items.length > 1) grid.classList.add('multi');
-  items.forEach((item) => {
+  items.forEach((item, index) => {
     const isVideo = item.file ? item.file.type.startsWith('video/') : getMediaType(item.preview) === 'video';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'preview-thumb';
+
     const el = document.createElement(isVideo ? 'video' : 'img');
     el.src = item.preview;
     if (isVideo) { el.muted = true; el.controls = false; }
     el.loading = 'lazy';
-    grid.appendChild(el);
+    wrapper.appendChild(el);
+
+    if (allowRemove) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'preview-remove-btn';
+      removeBtn.innerHTML = '&times;';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        pendingMediaFiles.splice(index, 1);
+        if (pendingMediaFiles.length === 0) {
+          document.getElementById('create-preview-selected').classList.add('hidden');
+          document.getElementById('create-placeholder-icon').classList.remove('hidden');
+          document.getElementById('create-placeholder-text').classList.remove('hidden');
+        }
+        buildCreatePreviewGrid(pendingMediaFiles, 'create-preview-selected', true);
+        buildCreatePreviewGrid(pendingMediaFiles, 'create-preview-grid', true);
+        updateCreateChangeButton();
+      });
+      wrapper.appendChild(removeBtn);
+    }
+
+    grid.appendChild(wrapper);
   });
 }
 
@@ -622,20 +789,343 @@ async function confirmDelete() {
 }
 
 async function openProfile() {
-  if (!currentUser) await fetchCurrentUser();
-  if (!currentUser) return;
-  document.getElementById('profile-avatar').textContent = getInitials(currentUser.email);
-  document.getElementById('profile-email').textContent = currentUser.email;
+  document.getElementById('feed-page').classList.add('hidden');
+  document.getElementById('profile-page').classList.remove('hidden');
+  activePage = 'profile';
+  const token = getToken();
+  if (!token) return;
   try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (!payload.user_id) return;
+    const user = await api(`/users/${payload.user_id}`);
+    const email = user.email;
+    const username = email.split('@')[0];
+    const initial = getInitials(email);
+    const gradient = getGradient(email);
+    const gradientStr = `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`;
+    document.getElementById('profile-avatar').textContent = initial;
+    document.getElementById('profile-avatar').style.background = gradientStr;
+    document.getElementById('profile-username').textContent = username;
+    document.getElementById('profile-bio').textContent = '';
     const posts = await api('/posts/?limit=100&skip=0&search=');
-    const userPosts = posts.filter(p => (p.Post || p).owner_id === currentUser.id);
+    const userPosts = posts.filter(p => (p.Post || p).owner_id === user.id);
     document.getElementById('profile-post-count').textContent = userPosts.length;
-    const totalLikes = userPosts.reduce((sum, p) => sum + (p.votes || 0), 0);
-    document.getElementById('profile-like-count').textContent = totalLikes;
-  } catch { document.getElementById('profile-post-count').textContent = '0'; document.getElementById('profile-like-count').textContent = '0'; }
-  document.getElementById('profile-modal').classList.remove('hidden');
+    renderProfilePosts(userPosts);
+  } catch (err) {
+    showError('error-banner', 'Failed to load profile: ' + err.message);
+  }
 }
 
-function closeProfileModal() {
-  document.getElementById('profile-modal').classList.add('hidden');
+function renderProfilePosts(posts) {
+  const grid = document.getElementById('profile-posts');
+  grid.innerHTML = '';
+  if (posts.length === 0) {
+    grid.innerHTML = '<div class="profile-posts-empty">No posts yet.</div>';
+    return;
+  }
+  posts.forEach((post) => {
+    const p = post.Post || post;
+    const { mediaUrls } = getContentParts(p.content || '');
+    const thumb = mediaUrls[0] || '';
+    const el = document.createElement('div');
+    el.className = 'profile-post-thumb';
+    if (thumb) {
+      el.innerHTML = `<img src="${escHtml(thumb)}" alt="${escHtml(p.title)}" loading="lazy">`;
+    } else {
+      const g = getGradient(p.owner?.email || `user${p.owner_id}@picto`);
+      el.innerHTML = `<div class="profile-post-thumb-fallback" style="background:linear-gradient(135deg,${g[0]},${g[1]},${g[2]})">${p.title.charAt(0).toUpperCase()}</div>`;
+    }
+    if (mediaUrls.length > 1) {
+      el.innerHTML += `<div class="profile-post-thumb-multi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg></div>`;
+    }
+    grid.appendChild(el);
+  });
+}
+
+function closeProfile() {
+  showFeedSection();
+}
+
+let commentsPostId = null;
+let replyToCommentId = null;
+let replyToUsername = null;
+
+function openCommentsModal(postId) {
+  commentsPostId = postId;
+  replyToCommentId = null;
+  replyToUsername = null;
+  document.getElementById('comments-reply-to').classList.add('hidden');
+  document.getElementById('comments-input').value = '';
+  document.getElementById('comments-post-btn').disabled = false;
+  document.getElementById('comments-post-btn').textContent = 'Post';
+  document.getElementById('comments-list').innerHTML = '';
+  document.getElementById('comments-loading').classList.remove('hidden');
+  document.getElementById('comments-modal').classList.remove('hidden');
+  loadComments();
+}
+
+function closeCommentsModal() {
+  document.getElementById('comments-modal').classList.add('hidden');
+  commentsPostId = null;
+  replyToCommentId = null;
+  replyToUsername = null;
+}
+
+async function loadComments() {
+  if (!commentsPostId) return;
+  try {
+    const comments = await api(`/posts/${commentsPostId}/comments`);
+    document.getElementById('comments-loading').classList.add('hidden');
+    renderComments(comments || []);
+  } catch (err) {
+    document.getElementById('comments-loading').classList.add('hidden');
+    document.getElementById('comments-list').innerHTML = `<div class="comments-error">Failed to load comments: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderComments(comments) {
+  const list = document.getElementById('comments-list');
+  list.innerHTML = '';
+  if (comments.length === 0) {
+    list.innerHTML = '<div class="comments-empty">No comments yet.</div>';
+    return;
+  }
+  comments.forEach(c => {
+    const el = renderCommentElement(c, 0);
+    list.appendChild(el);
+  });
+}
+
+function renderCommentElement(comment, level) {
+  const email = comment.owner?.email || `user${comment.user_id}@picto`;
+  const initial = getInitials(email);
+  const gradient = getGradient(email);
+  const gradientStr = `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`;
+  const username = email.split('@')[0];
+  const isOwner = currentUser && comment.user_id === currentUser.id;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'comment-wrapper';
+  if (level > 0) wrapper.classList.add('comment-wrapper-reply');
+
+  const div = document.createElement('div');
+  div.className = 'comment-item';
+  div.innerHTML = `
+    <div class="comment-avatar" style="background:${gradientStr}">${initial}</div>
+    <div class="comment-body">
+      <div class="comment-username">${escHtml(username)}</div>
+      <div class="comment-text">${escHtml(comment.content)}</div>
+      <div class="comment-footer">
+        <span class="comment-time">${timeAgo(comment.created_at)}</span>
+        <button class="comment-reply-btn" data-comment-id="${comment.id}" data-username="${escHtml(username)}">Reply</button>
+        ${isOwner ? `<button class="comment-delete-btn" data-comment-id="${comment.id}">Delete</button>` : ''}
+      </div>
+    </div>`;
+
+  wrapper.appendChild(div);
+
+  div.querySelector('.comment-reply-btn').addEventListener('click', () => {
+    const cid = parseInt(div.querySelector('.comment-reply-btn').dataset.commentId);
+    const uname = div.querySelector('.comment-reply-btn').dataset.username;
+    setReplyTo(cid, uname);
+  });
+
+  const delBtn = div.querySelector('.comment-delete-btn');
+  if (delBtn) {
+    delBtn.addEventListener('click', async () => {
+      const cid = parseInt(delBtn.dataset.commentId);
+      try {
+        await api(`/comments/${cid}`, { method: 'DELETE' });
+        loadComments();
+      } catch (err) { /* ignore */ }
+    });
+  }
+
+  if (comment.replies && comment.replies.length > 0) {
+    const repliesContainer = document.createElement('div');
+    repliesContainer.className = 'comment-replies';
+    comment.replies.forEach(r => {
+      const replyEl = renderCommentElement(r, level + 1);
+      repliesContainer.appendChild(replyEl);
+    });
+    wrapper.appendChild(repliesContainer);
+  }
+
+  return wrapper;
+}
+
+function setReplyTo(commentId, username) {
+  replyToCommentId = commentId;
+  replyToUsername = username;
+  document.getElementById('comments-reply-username').textContent = `@${username}`;
+  document.getElementById('comments-reply-to').classList.remove('hidden');
+  document.getElementById('comments-input').focus();
+}
+
+function cancelReply() {
+  replyToCommentId = null;
+  replyToUsername = null;
+  document.getElementById('comments-reply-to').classList.add('hidden');
+}
+
+async function handleCommentSubmit() {
+  const input = document.getElementById('comments-input');
+  const content = input.value.trim();
+  if (!content) return;
+  const btn = document.getElementById('comments-post-btn');
+  btn.disabled = true; btn.textContent = 'Posting...';
+  try {
+    const body = { content };
+    if (replyToCommentId) body.parent_id = replyToCommentId;
+    await api(`/posts/${commentsPostId}/comments`, { method: 'POST', body: JSON.stringify(body) });
+    input.value = '';
+    cancelReply();
+    btn.disabled = false; btn.textContent = 'Post';
+    loadComments();
+    const feedCards = document.querySelectorAll('.post-card');
+    feedCards.forEach(card => {
+      if (card.dataset.postId == commentsPostId) {
+        const link = card.querySelector('.post-comments-link');
+        if (link) {
+          const count = parseInt(link.textContent.match(/\d+/)?.[0] || '0') + 1;
+          link.textContent = `View all ${count} comments`;
+        }
+      }
+    });
+  } catch (err) {
+    showError('error-banner', err.message);
+    btn.disabled = false; btn.textContent = 'Post';
+  }
+}
+
+function buildNotifText(n) {
+  const username = n.actor?.email?.split('@')[0] || 'someone';
+  if (n.type === 'like') return `<strong>${escHtml(username)}</strong> liked your post`;
+  if (n.type === 'comment') return `<strong>${escHtml(username)}</strong> commented on your post`;
+  if (n.type === 'reply') return `<strong>${escHtml(username)}</strong> replied to your comment`;
+  return `<strong>${escHtml(username)}</strong> interacted with your post`;
+}
+
+function updateNotifDots(count) {
+  document.getElementById('notif-dot').classList.toggle('hidden', count === 0);
+  document.getElementById('notif-dot-bottom').classList.toggle('hidden', count === 0);
+}
+
+function openNotifications() {
+  document.getElementById('notif-list').innerHTML = '';
+  document.getElementById('notif-loading').classList.remove('hidden');
+  document.getElementById('notif-empty').classList.add('hidden');
+  document.getElementById('notif-mark-all-read').classList.add('hidden');
+  document.getElementById('notif-modal').classList.remove('hidden');
+  loadNotifications();
+}
+
+function closeNotifications() {
+  document.getElementById('notif-modal').classList.add('hidden');
+}
+
+async function loadNotifications() {
+  try {
+    const data = await api('/notifications/');
+    document.getElementById('notif-loading').classList.add('hidden');
+    updateNotifDots(data.unread_count);
+    renderNotifications(data.notifications || []);
+    if (data.unread_count > 0) {
+      document.getElementById('notif-mark-all-read').classList.remove('hidden');
+    }
+  } catch (err) {
+    document.getElementById('notif-loading').classList.add('hidden');
+    document.getElementById('notif-list').innerHTML = `<div class="notif-empty">Failed to load notifications</div>`;
+  }
+}
+
+function renderNotifications(notifications) {
+  const list = document.getElementById('notif-list');
+  list.innerHTML = '';
+  if (notifications.length === 0) {
+    document.getElementById('notif-empty').classList.remove('hidden');
+    return;
+  }
+  notifications.forEach(n => {
+    const email = n.actor?.email || `user${n.actor_id}@picto`;
+    const initial = getInitials(email);
+    const gradient = getGradient(email);
+    const el = document.createElement('div');
+    el.className = 'notif-item' + (n.read ? '' : ' unread');
+    el.innerHTML = `
+      <div class="notif-item-avatar" style="background:linear-gradient(135deg,${gradient[0]},${gradient[1]},${gradient[2]})">${initial}</div>
+      <div class="notif-item-body">
+        <div class="notif-item-text">${buildNotifText(n)}</div>
+        <div class="notif-item-time">${timeAgo(n.created_at)}</div>
+      </div>
+      ${n.read ? '' : '<div class="notif-item-dot"></div>'}`;
+    if (!n.read) {
+      el.addEventListener('click', async () => {
+        try { await api(`/notifications/${n.id}/read`, { method: 'PUT' }); } catch {}
+        el.classList.remove('unread');
+        el.querySelector('.notif-item-dot')?.remove();
+        const dots = document.querySelectorAll('.notif-item.unread');
+        if (dots.length === 0) document.getElementById('notif-mark-all-read').classList.add('hidden');
+        updateNotifDots(dots.length - 1);
+      });
+    }
+    list.appendChild(el);
+  });
+}
+
+async function markAllNotificationsRead() {
+  try {
+    await api('/notifications/read-all', { method: 'PUT' });
+    document.querySelectorAll('.notif-item.unread').forEach(el => {
+      el.classList.remove('unread');
+      el.querySelector('.notif-item-dot')?.remove();
+    });
+    document.getElementById('notif-mark-all-read').classList.add('hidden');
+    updateNotifDots(0);
+  } catch {}
+}
+
+let prevNotifCount = 0;
+
+async function pollNotifications() {
+  try {
+    const data = await api('/notifications/');
+    const count = data.unread_count || 0;
+    updateNotifDots(count);
+    if (count > prevNotifCount && count > 0) {
+      const newNotifs = (data.notifications || []).slice(0, count - prevNotifCount);
+      newNotifs.forEach(n => showNotifToast(n));
+    }
+    prevNotifCount = count;
+  } catch (err) {
+    console.warn('pollNotifications failed:', err.message);
+  }
+}
+
+function showNotifToast(n) {
+  const email = n.actor?.email || `user${n.actor_id}@picto`;
+  const initial = getInitials(email);
+  const gradient = getGradient(email);
+  const text = buildNotifText(n);
+  const container = document.getElementById('notif-toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'notif-toast';
+  toast.innerHTML = `
+    <div class="notif-toast-avatar" style="background:linear-gradient(135deg,${gradient[0]},${gradient[1]},${gradient[2]})">${initial}</div>
+    <div class="notif-toast-text">${text}</div>`;
+  toast.addEventListener('click', () => { closeToast(toast); openNotifications(); });
+  container.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => closeToast(toast), 5000);
+}
+
+function closeToast(toast) {
+  toast.classList.remove('show');
+  setTimeout(() => toast.remove(), 300);
+}
+
+// Poll for unread count (immediately, then every 15s)
+if (document.getElementById('feed')) {
+  pollNotifications();
+  setInterval(pollNotifications, 15000);
 }

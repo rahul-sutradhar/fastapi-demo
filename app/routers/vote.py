@@ -9,8 +9,27 @@ router = APIRouter(
     tags=['vote']
 )
 
+
+def _create_notification(db, user_id, actor_id, type, post_id=None, comment_id=None):
+    if user_id == actor_id:
+        return
+    notification = models.Notification(
+        user_id=user_id,
+        actor_id=actor_id,
+        type=type,
+        post_id=post_id,
+        comment_id=comment_id,
+    )
+    db.add(notification)
+
+
+@router.get("/my")
+def get_my_votes(db: Session = Depends(database.get_db), current_user: models.User = Depends(oauth2.get_current_user)):
+    votes = db.query(models.Vote.post_id).filter(models.Vote.user_id == current_user.id).all()
+    return [v.post_id for v in votes]
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def vote(vote: schemas.Vote, db: Session = Depends(database.get_db), current_user: int = Depends(oauth2.get_current_user)):
+def vote(vote: schemas.Vote, db: Session = Depends(database.get_db), current_user: models.User = Depends(oauth2.get_current_user)):
 
     post = db.query(models.Post).filter(models.Post.id == vote.post_id).first()
 
@@ -27,6 +46,7 @@ def vote(vote: schemas.Vote, db: Session = Depends(database.get_db), current_use
         
         new_vote = models.Vote(post_id = vote.post_id, user_id=current_user.id)
         db.add(new_vote)
+        _create_notification(db, post.owner_id, current_user.id, "like", post_id=post.id)
         db.commit()
         return {"message": "successfully added vote"} 
     

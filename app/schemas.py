@@ -71,9 +71,26 @@ class Post(PostBase):
 class PostOut(BaseModel):
     Post: Post
     votes: int
+    comment_count: int = 0
 
-    # class Config:
-    #     orm_mode = True     #This old syntax is deprecated
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommentCreate(BaseModel):
+    content: str
+    parent_id: Optional[int] = None
+
+
+class CommentOut(BaseModel):
+    id: int
+    post_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+    parent_id: Optional[int] = None
+    owner: UserOut
+    replies: list["CommentOut"] = []
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -91,8 +108,31 @@ class TokenData(BaseModel):
     id: Optional[str] = None
 
 
+# Comment
+CommentOut.model_rebuild()
 
-# Vote
+
+# Vote  
 class Vote(BaseModel):
     post_id: int
     dir: conint(le=1)
+
+
+# Notification
+class NotificationOut(BaseModel):
+    id: int
+    user_id: int
+    actor_id: int
+    actor: UserOut
+    post_id: Optional[int] = None
+    comment_id: Optional[int] = None
+    type: str
+    read: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationsList(BaseModel):
+    notifications: list[NotificationOut]
+    unread_count: int

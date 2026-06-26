@@ -43,10 +43,7 @@ def client(session):
     # Base.metadata.drop_all(bind=engine)         # Drop all tables (if exist)
     # Base.metadata.create_all(bind=engine)       # Create all the tables before the test runs
     def overridd_get_db():
-        try:
-            yield session
-        finally:
-            session.close()
+        yield session
     app.dependency_overrides[get_db] = overridd_get_db
 
     yield TestClient(app)

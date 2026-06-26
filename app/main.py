@@ -1,18 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import post, user, auth, vote, cloudinary_upload
+from .routers import post, user, auth, vote, cloudinary_upload, comment, notification
 
 from .config import settings
 
 
-print(settings.database_username)
+# print(settings.database_username)
 
 
 app = FastAPI()
 
 
-origins = ["*"]
+origins = ["*", "null"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +28,8 @@ app.include_router(user.router)
 app.include_router(auth.router)
 app.include_router(vote.router)
 app.include_router(cloudinary_upload.router)
+app.include_router(comment.router)
+app.include_router(notification.router)
 
 
 @app.get("/")

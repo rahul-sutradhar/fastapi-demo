@@ -29,10 +29,14 @@ def get_posts(db: Session = Depends(get_db), current_user: int = Depends(oauth2.
     # print(limit)
     # posts = db.query(models.Post).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
     
-    posts = (db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
-    .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
-    .group_by(models.Post.id)
+    vote_subq = db.query(func.count(models.Vote.post_id).label("votes"), models.Vote.post_id).group_by(models.Vote.post_id).subquery()
+    comment_subq = db.query(func.count(models.Comment.id).label("comment_count"), models.Comment.post_id).group_by(models.Comment.post_id).subquery()
+
+    posts = (db.query(models.Post, func.coalesce(vote_subq.c.votes, 0).label("votes"), func.coalesce(comment_subq.c.comment_count, 0).label("comment_count"))
+    .outerjoin(vote_subq, vote_subq.c.post_id == models.Post.id)
+    .outerjoin(comment_subq, comment_subq.c.post_id == models.Post.id)
     .filter(models.Post.title.contains(search))
+    .order_by(models.Post.created_at.desc())
     .limit(limit)
     .offset(skip)
     .all())
@@ -61,7 +65,10 @@ def get_post(id: int, db: Session = Depends(get_db), current_user: int = Depends
     # post = db.query(models.Post).filter(models.Post.id == id).first()
     # print(post)
 
-    post = db.query(models.Post, func.count(models.Vote.post_id).label("votes")).join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True).group_by(models.Post.id).filter(models.Post.id == id).first()
+    vote_subq = db.query(func.count(models.Vote.post_id).label("votes"), models.Vote.post_id).group_by(models.Vote.post_id).subquery()
+    comment_subq = db.query(func.count(models.Comment.id).label("comment_count"), models.Comment.post_id).group_by(models.Comment.post_id).subquery()
+
+    post = db.query(models.Post, func.coalesce(vote_subq.c.votes, 0).label("votes"), func.coalesce(comment_subq.c.comment_count, 0).label("comment_count")).outerjoin(vote_subq, vote_subq.c.post_id == models.Post.id).outerjoin(comment_subq, comment_subq.c.post_id == models.Post.id).filter(models.Post.id == id).first()
 
     # print(post)
     
